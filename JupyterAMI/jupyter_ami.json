@@ -1,0 +1,55 @@
+{
+  "variables": {
+    "region": "",
+    "s3_bucket" : "",
+    "dir": "",
+    "output_manifest": ""
+  },
+  "builders": [{
+    "type": "amazon-ebs",
+    "region": "{{user `region`}}",
+    "ami_regions": ["{{user `region`}}"],
+    "source_ami": "ami-b73b63a0",
+    "instance_type": "t2.micro",
+    "ssh_username": "ec2-user",
+    "ami_name": "Amazon Linux and Jupyter {{timestamp}}",
+    "iam_instance_profile" : "packer_profile",
+    "tags": {
+      "Name": "Amazon Linux and Jupyter",
+      "CreatedAt": "{{isotime}}",
+      "Timestamp": "{{timestamp}}",
+      "Owner": "iilunin"
+    }
+  }],
+  "provisioners": [{
+    "type": "shell",
+    "inline": [
+      "sleep 30",
+      "sudo yum update -y",
+      "mkdir {{user `dir`}}",
+      "chmod 777 {{user `dir`}}",
+      "echo \"*/2 * * * * ec2-user aws s3 sync {{user `s3_bucket`}} {{user `dir`}} --delete;aws s3 sync {{user `dir`}} {{user `s3_bucket`}} --delete\" > s3_sync",
+      "sudo mv s3_sync /etc/cron.d/",
+      "sudo yum install -y docker",
+      "sudo service docker start",
+      "sleep 5",
+      "sudo usermod -a -G docker ec2-user",
+      "echo 'aws s3 sync s3://jupyter-sync/jupyter /home/ec2-user/jupyter/ --delete' > first_sync.sh",
+      "chmod +x first_sync.sh",
+      "sudo reboot"
+    ]
+  },
+    {
+    "type": "shell",
+    "inline": [
+      "docker pull jupyter/all-spark-notebook",
+      "docker run --restart=unless-stopped -d --name=pyspark_nb -p 8888:8888 -v {{user `dir`}}:/home/jovyan/work -e GRANT_SUDO=yes jupyter/all-spark-notebook"
+    ],
+    "pause_before": "60s"
+  }],
+  "post-processors": [{
+    "type": "manifest",
+    "filename": "{{user `output_manifest`}}",
+    "strip_path": true
+  }]
+}
