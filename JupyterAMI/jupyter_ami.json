@@ -1,7 +1,6 @@
 {
   "variables": {
     "region": "",
-    "s3_bucket" : "",
     "dir": "",
     "output_manifest": ""
   },
@@ -10,10 +9,18 @@
     "region": "{{user `region`}}",
     "ami_regions": ["{{user `region`}}"],
     "source_ami": "ami-b73b63a0",
-    "instance_type": "t2.micro",
+    "instance_type": "c4.large",
     "ssh_username": "ec2-user",
     "ami_name": "Amazon Linux and Jupyter {{timestamp}}",
     "iam_instance_profile" : "packer_profile",
+    "launch_block_device_mappings": [
+    {
+      "device_name": "/dev/xvda",
+      "volume_size": 30,
+      "volume_type": "gp2",
+      "delete_on_termination": true
+    }
+  ],
     "tags": {
       "Name": "Amazon Linux and Jupyter",
       "CreatedAt": "{{isotime}}",
@@ -24,32 +31,46 @@
   "provisioners": [{
     "type": "shell",
     "inline": [
-      "sleep 30",
-      "sudo yum update -y",
-      "mkdir {{user `dir`}}",
-      "chmod 777 {{user `dir`}}",
-      "echo \"*/2 * * * * ec2-user aws s3 sync {{user `s3_bucket`}} {{user `dir`}} --delete;aws s3 sync {{user `dir`}} {{user `s3_bucket`}} --delete\" > s3_sync",
-      "sudo mv s3_sync /etc/cron.d/",
+      "sudo yum update -y && sudo yum install -y nfs-utils",
+      "sudo mkdir {{user `dir`}}",
+      "sudo chown ec2-user:ec2-user {{user `dir`}}",
+      "cp /etc/fstab fstab",
+      "echo \"$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone).{{user `efs`}}.efs.us-east-1.amazonaws.com:/ {{user `dir`}} nfs4 nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 0 0\" >> fstab",
+      "sudo mv fstab /etc/fstab",
+      "sudo mount -a",
       "sudo yum install -y docker",
+      "sudo usermod -a -G docker ec2-user",
       "sudo service docker start",
       "sleep 5",
-      "sudo usermod -a -G docker ec2-user",
-      "echo 'aws s3 sync s3://jupyter-sync/jupyter /home/ec2-user/jupyter/ --delete' > first_sync.sh",
-      "chmod +x first_sync.sh",
+      "cp /etc/rc.local rc.local",
+      "echo \"chown ec2-user:ec2-user {{user `dir`}}\" >> rc.local",
+      "sudo mv rc.local /etc/rc.local",
       "sudo reboot"
-    ]
-  },
+  ]},
     {
     "type": "shell",
     "inline": [
+      "sudo chown ec2-user:ec2-user {{user `dir`}}",
+      "sudo mount -a",
       "docker pull jupyter/all-spark-notebook",
-      "docker run --restart=unless-stopped -d --name=pyspark_nb -p 8888:8888 -v {{user `dir`}}:/home/jovyan/work -e GRANT_SUDO=yes jupyter/all-spark-notebook"
+      "sudo docker run --restart=unless-stopped -d --name=pyspark_nb -p 8888:8888 -v {{user `dir`}}:/home/jovyan/work -e GRANT_SUDO=yes jupyter/all-spark-notebook start-notebook.sh --NotebookApp.token=''",
+      "sudo chown ec2-user:ec2-user {{user `dir`}}",
+      "sudo reboot"
     ],
-    "pause_before": "60s"
-  }],
-  "post-processors": [{
-    "type": "manifest",
-    "filename": "{{user `output_manifest`}}",
-    "strip_path": true
-  }]
+    "pause_before": "30s"
+  },
+  {
+    "type": "shell",
+    "inline": [
+      "sudo mount -a"
+    ],
+    "pause_before": "30s"
+    }],
+  "post-processors": [
+    {
+      "type": "manifest",
+      "output": "{{user `output_manifest`}}",
+      "strip_path": true
+    }
+  ]
 }

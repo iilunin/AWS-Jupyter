@@ -1,9 +1,9 @@
 provider "aws"{
-	region = "us-east-1"
+  region = "us-east-1"
 }
 
 variable "jupyter_ami"{
-	default = "ami-c61317d1"
+	default = "ami-5a45504d"
 }
 
 variable "keyfile"{
@@ -11,7 +11,7 @@ variable "keyfile"{
 }
 
 variable "jupyter_instance_type"{
-	default = "t2.micro"
+	default = "t2.small"
 }
 
 resource "aws_security_group" "jupyter_security_group" {
@@ -26,7 +26,7 @@ resource "aws_security_group" "jupyter_security_group" {
 		cidr_blocks = ["0.0.0.0/0"]
 	}
 
-	# SSH access from anywhere
+	# HTTP access from anywhere
 	ingress {
 		from_port   = 80
 		to_port     = 80
@@ -34,10 +34,17 @@ resource "aws_security_group" "jupyter_security_group" {
 		cidr_blocks = ["0.0.0.0/0"]
 	}
 
-	# SSH access from anywhere
+	# HTTP access from anywhere
 	ingress {
 		from_port   = 8888
 		to_port     = 8888
+		protocol    = "tcp"
+		cidr_blocks = ["0.0.0.0/0"]
+	}
+
+  ingress {
+		from_port   = 2049
+		to_port     = 2049
 		protocol    = "tcp"
 		cidr_blocks = ["0.0.0.0/0"]
 	}
@@ -64,14 +71,14 @@ resource "aws_key_pair" "jupyter_auth" {
 #TODO: add default IAM role
 
 resource "aws_instance" "jupyter_host" {
-	ami           = "${var.jupyter_ami}" 
+	ami           = "${var.jupyter_ami}"
 	instance_type = "${var.jupyter_instance_type}"
 
 	key_name = "${aws_key_pair.jupyter_auth.id}"
 
 	vpc_security_group_ids = ["${aws_security_group.jupyter_security_group.id}"]
 
-	tags = 
+	tags =
 	{Name = "Jupyter"}
 
 	user_data = <<EOF
@@ -89,5 +96,5 @@ output "jupyter_ssh"{
 
 
 output "jupyter_web"{
-	value = "${aws_instance.jupyter_host.public_ip}:8888"
+	value = "http://${aws_instance.jupyter_host.public_ip}:8888"
 }

@@ -2,7 +2,7 @@ provider "aws"{
   region = "us-east-1"
 }
 
-resource "aws_iam_instance_profile" "salt_master_packer_profile" {
+resource "aws_iam_instance_profile" "packer_profile" {
     name = "packer_profile"
     roles = ["${aws_iam_role.packer_role.name}"]
 }

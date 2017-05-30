@@ -5,4 +5,5 @@
 *.pub
 *.sublime-project
 *.sublime-workspace
-*.variables.json
+variables.json
+manifest.json
